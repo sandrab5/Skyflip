@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skyflip — Book flights worldwide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0E1A;
+    --panel:#12182B;
+    --panel-raised:#1A2138;
+    --line:#26304A;
+    --flap-amber:#F5A623;
+    --flap-amber-dim:#8A5E1C;
+    --teal:#3FA7A0;
+    --teal-dim:#25625D;
+    --cream:#EDEAE2;
+    --muted:#8A93A6;
+    --danger:#E0654F;
+    --good:#5FBF8F;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--cream);
+    font-family:var(--sans);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+  button{font-family:var(--sans);cursor:pointer;}
+  .app{max-width:1080px;margin:0 auto;padding:0 24px 80px;}
+
+  /* NAV */
+  .nav{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:22px 24px;max-width:1080px;margin:0 auto;
+  }
+  .logo{
+    font-family:var(--mono);font-weight:700;font-size:19px;letter-spacing:1px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .logo .dot{width:8px;height:8px;background:var(--flap-amber);border-radius:1px;display:inline-block;}
+  .nav-links{display:flex;gap:6px;}
+  .nav-btn{
+    background:transparent;border:1px solid transparent;color:var(--muted);
+    padding:8px 14px;border-radius:6px;font-size:14px;font-weight:600;
+  }
+  .nav-btn.active{color:var(--cream);border-color:var(--line);background:var(--panel);}
+  .nav-btn:hover{color:var(--cream);}
+
+  /* HERO / SEARCH */
+  .hero{
+    border:1px solid var(--line);background:var(--panel);
+    border-radius:14px;padding:28px;margin-top:6px;position:relative;overflow:hidden;
+  }
+  .hero::before{
+    content:"";position:absolute;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,var(--flap-amber),var(--teal));
+  }
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;color:var(--flap-amber);letter-spacing:2px;
+    text-transform:uppercase;margin:0 0 6px;
+  }
+  .hero h1{
+    font-size:30px;margin:0 0 6px;font-weight:800;letter-spacing:-0.5px;
+  }
+  .hero p.sub{color:var(--muted);margin:0 0 22px;font-size:14.5px;}
+
+  .search-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:14px;
+  }
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field label{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:600;}
+  .field select, .field input{
+    background:var(--bg);border:1px solid var(--line);color:var(--cream);
+    padding:12px 12px;border-radius:8px;font-size:15px;font-family:var(--sans);
+    width:100%;
+  }
+  .field select:focus, .field input:focus{outline:2px solid var(--teal);outline-offset:1px;}
+  .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-top:14px;}
+  .swap-row{display:flex;align-items:center;gap:10px;}
+  .swap-btn{
+    background:var(--panel-raised);border:1px solid var(--line);color:var(--muted);
+    width:38px;height:38px;border-radius:8px;font-size:16px;flex-shrink:0;margin-top:18px;
+  }
+  .swap-btn:hover{color:var(--cream);border-color:var(--teal);}
+
+  .cta{
+    margin-top:22px;background:var(--flap-amber);color:#1A1200;border:none;
+    padding:14px 22px;border-radius:8px;font-weight:700;font-size:15px;
+    width:100%;letter-spacing:0.2px;
+  }
+  .cta:hover{background:#ffb84a;}
+  .cta.secondary{background:var(--teal);color:#04211F;}
+  .cta.secondary:hover{background:#4fc4bc;}
+  .cta.ghost{background:transparent;border:1px solid var(--line);color:var(--cream);}
+  .cta.ghost:hover{border-color:var(--teal);}
+
+  /* SPLIT FLAP BOARD */
+  .board{
+    margin-top:28px;border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    background:var(--panel);
+  }
+  .board-head{
+    display:grid;grid-template-columns:110px 1fr 100px 90px 120px 110px;
+    padding:12px 18px;font-family:var(--mono);font-size:11px;letter-spacing:1.5px;
+    color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--line);
+  }
+  .board-row{
+    display:grid;grid-template-columns:110px 1fr 100px 90px 120px 110px;
+    align-items:center;padding:16px 18px;border-bottom:1px solid var(--line);
+    gap:6px;
+  }
+  .board-row:last-child{border-bottom:none;}
+  .flap{
+    font-family:var(--mono);color:var(--flap-amber);font-weight:700;font-size:15px;
+    display:inline-block;
+  }
+  @keyframes flapin{
+    0%{opacity:0;transform:translateY(-6px);}
+    100%{opacity:1;transform:translateY(0);}
+  }
+  .flap-anim{animation:flapin 0.35s ease both;}
+  .flight-main .airline{font-weight:700;font-size:14.5px;}
+  .flight-main .sub{color:var(--muted);font-size:12.5px;margin-top:2px;}
+  .stops-tag{
+    font-size:11px;padding:3px 8px;border-radius:20px;border:1px solid var(--line);
+    color:var(--muted);display:inline-block;width:fit-content;
+  }
+  .price{font-family:var(--mono);font-weight:700;font-size:16px;color:var(--cream);}
+  .price .per{display:block;font-size:10px;color:var(--muted);font-weight:400;}
+  .select-btn{
+    background:var(--panel-raised);border:1px solid var(--line);color:var(--cream);
+    padding:9px 14px;border-radius:7px;font-size:13px;font-weight:600;
+  }
+  .select-btn:hover{border-color:var(--flap-amber);color:var(--flap-amber);}
+
+  .section-title{font-size:20px;font-weight:800;margin:34px 0 4px;letter-spacing:-0.3px;}
+  .section-sub{color:var(--muted);font-size:13.5px;margin:0 0 16px;}
+
+  /* BOOKING FORM */
+  .panel{
+    border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:26px;margin-top:18px;
+  }
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .summary-card{
+    border:1px dashed var(--line);border-radius:10px;padding:16px 18px;margin-bottom:20px;
+    background:var(--panel-raised);
+  }
+  .summary-row{display:flex;justify-content:space-between;font-size:13.5px;padding:4px 0;color:var(--muted);}
+  .summary-row b{color:var(--cream);font-weight:600;}
+  .summary-total{
+    display:flex;justify-content:space-between;border-top:1px solid var(--line);
+    margin-top:8px;padding-top:10px;font-family:var(--mono);font-weight:700;font-size:16px;
+  }
+
+  /* CONFIRMATION / TICKET */
+  .ticket{
+    border:1px solid var(--line);border-radius:14px;background:var(--panel);
+    padding:0;overflow:hidden;margin-top:18px;position:relative;
+  }
+  .ticket-top{
+    padding:24px 26px;display:flex;justify-content:space-between;align-items:flex-start;
+    background:var(--panel-raised);
+  }
+  .ticket-ref{font-family:var(--mono);color:var(--flap-amber);font-size:13px;letter-spacing:1px;}
+  .ticket-ref b{font-size:20px;display:block;margin-top:2px;}
+  .ticket-status{
+    font-size:11px;padding:5px 10px;border-radius:20px;font-weight:700;letter-spacing:0.5px;
+    text-transform:uppercase;background:rgba(95,191,143,0.15);color:var(--good);border:1px solid var(--good);
+  }
+  .ticket-route{padding:26px;display:flex;align-items:center;gap:18px;}
+  .ticket-city{flex:1;}
+  .ticket-city .code{font-family:var(--mono);font-size:32px;font-weight:700;}
+  .ticket-city .name{color:var(--muted);font-size:12.5px;margin-top:2px;}
+  .ticket-plane{color:var(--teal);font-size:20px;flex-shrink:0;}
+  .ticket-divider{border-top:1px dashed var(--line);margin:0 26px;position:relative;}
+  .ticket-divider::before, .ticket-divider::after{
+    content:"";position:absolute;top:-11px;width:22px;height:22px;background:var(--bg);border-radius:50%;
+  }
+  .ticket-divider::before{left:-37px;}
+  .ticket-divider::after{right:-37px;}
+  .ticket-details{
+    padding:22px 26px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px;
+  }
+  .ticket-details .lbl{font-size:10.5px;text-transform:uppercase;color:var(--muted);letter-spacing:1px;margin-bottom:4px;}
+  .ticket-details .val{font-weight:600;font-size:14.5px;}
+  .ticket-actions{padding:20px 26px;border-top:1px solid var(--line);display:flex;gap:10px;flex-wrap:wrap;}
+
+  /* TRACKING TIMELINE */
+  .timeline{margin-top:22px;}
+  .tl-item{display:flex;gap:14px;padding-bottom:26px;position:relative;}
+  .tl-item:last-child{padding-bottom:0;}
+  .tl-line{
+    position:absolute;left:11px;top:26px;bottom:0;width:2px;background:var(--line);
+  }
+  .tl-item:last-child .tl-line{display:none;}
+  .tl-dot{
+    width:24px;height:24px;border-radius:50%;border:2px solid var(--line);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    background:var(--panel);font-size:12px;z-index:1;
+  }
+  .tl-item.done .tl-dot{border-color:var(--good);color:var(--good);background:rgba(95,191,143,0.1);}
+  .tl-item.current .tl-dot{border-color:var(--flap-amber);color:var(--flap-amber);background:rgba(245,166,35,0.12);}
+  .tl-content b{display:block;font-size:14.5px;}
+  .tl-content span{color:var(--muted);font-size:12.5px;}
+
+  .toast{
+    position:fixed;bottom:26px;left:50%;transform:translateX(-50%);
+    background:var(--panel-raised);border:1px solid var(--good);color:var(--cream);
+    padding:13px 20px;border-radius:9px;font-size:13.5px;box-shadow:0 8px 24px rgba(0,0,0,0.4);
+    z-index:50;display:flex;align-items:center;gap:8px;opacity:0;transition:opacity 0.25s, transform 0.25s;
+    pointer-events:none;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+  .modal-backdrop{
+    position:fixed;inset:0;background:rgba(6,8,16,0.7);display:none;align-items:center;justify-content:center;
+    z-index:60;padding:20px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:480px;width:100%;
+    padding:26px;
+  }
+  .modal h3{margin:0 0 6px;font-size:18px;}
+  .modal p.hint{color:var(--muted);font-size:13px;margin:0 0 16px;}
+  .email-preview{
+    background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:16px;
+    font-size:12.5px;color:var(--muted);margin-top:16px;max-height:200px;overflow-y:auto;
+    font-family:var(--mono);line-height:1.6;
+  }
+  .modal-actions{display:flex;gap:10px;margin-top:18px;}
+
+  .empty{
+    text-align:center;padding:60px 20px;color:var(--muted);
+  }
+  .empty .icon{font-size:36px;margin-bottom:10px;}
+
+  .track-form{display:flex;gap:12px;flex-wrap:wrap;}
+  .track-form .field{flex:1;min-width:200px;}
+
+  footer{
+    text-align:center;color:var(--muted);font-size:12px;padding:30px 24px 10px;
+  }
+
+  @media (max-width:680px){
+    .search-grid, .row-3, .grid-2{grid-template-columns:1fr;}
+    .board-head{display:none;}
+    .board-row{grid-template-columns:1fr;gap:10px;padding:16px;}
+    .ticket-details{grid-template-columns:1fr 1fr;}
+    .ticket-divider::before,.ticket-divider::after{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="logo"><span class="dot"></span>SKYFLIP</div>
+  <div class="nav-links">
+    <button class="nav-btn" data-nav="search">Book a flight</button>
+    <button class="nav-btn" data-nav="track">My bookings</button>
+  </div>
+</div>
+
+<div class="app" id="app"></div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-backdrop" id="emailModalBackdrop">
+  <div class="modal">
+    <h3>Send itinerary</h3>
+    <p class="hint">We'll send the full itinerary to any email address you enter below.</p>
+    <div class="field">
+      <label>Email address</label>
+      <input type="email" id="emailModalInput" placeholder="name@example.com" />
+    </div>
+    <div class="email-preview" id="emailModalPreview"></div>
+    <div class="modal-actions">
+      <button class="cta secondary" id="emailModalSend" style="flex:1">Send itinerary</button>
+      <button class="cta ghost" id="emailModalCancel" style="flex:0 0 auto;padding-left:18px;padding-right:18px;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<footer>Skyflip is a prototype booking experience — no real flights are sold. Itinerary emails send for real once the companion backend is deployed and configured.</footer>
+
+<script>
+/* ---------------- EMAIL BACKEND CONFIG ----------------
+   The frontend is served by the same Express server that exposes this API,
+   so a relative path works both locally and once deployed — no separate
+   URL or CORS setup needed. */
+const ITINERARY_API_URL = "/api/send-itinerary";
+
+/* ---------------- DATA ---------------- */
+const AIRPORTS = [
+  {code:"JFK", city:"New York", country:"United States"},
+  {code:"LAX", city:"Los Angeles", country:"United States"},
+  {code:"ORD", city:"Chicago", country:"United States"},
+  {code:"SFO", city:"San Francisco", country:"United States"},
+  {code:"ATL", city:"Atlanta", country:"United States"},
+  {code:"MIA", city:"Miami", country:"United States"},
+  {code:"DFW", city:"Dallas", country:"United States"},
+  {code:"SEA", city:"Seattle", country:"United States"},
+  {code:"LOS", city:"Lagos", country:"Nigeria"},
+  {code:"ABV", city:"Abuja", country:"Nigeria"},
+  {code:"LHR", city:"London", country:"United Kingdom"},
+  {code:"CDG", city:"Paris", country:"France"},
+  {code:"FRA", city:"Frankfurt", country:"Germany"},
+  {code:"AMS", city:"Amsterdam", country:"Netherlands"},
+  {code:"DXB", city:"Dubai", country:"United Arab Emirates"},
+  {code:"DOH", city:"Doha", country:"Qatar"},
+  {code:"NRT", city:"Tokyo", country:"Japan"},
+  {code:"SIN", city:"Singapore", country:"Singapore"},
+  {code:"SYD", city:"Sydney", country:"Australia"},
+  {code:"YYZ", city:"Toronto", country:"Canada"},
+  {code:"GRU", city:"São Paulo", country:"Brazil"},
+  {code:"JNB", city:"Johannesburg", country:"South Africa"},
+  {code:"CAI", city:"Cairo", country:"Egypt"},
+  {code:"IST", city:"Istanbul", country:"Türkiye"},
+];
+
+const AIRLINES = [
+  {name:"Northwind Air", code:"NW"},
+  {name:"Meridian Airways", code:"MR"},
+  {name:"Coastal Jet", code:"CJ"},
+  {name:"Harbor Airlines", code:"HB"},
+  {name:"Zenith Air", code:"ZN"},
+  {name:"BluePeak Airlines", code:"BP"},
+];
+
+/* ---------------- STATE ---------------- */
+let state = {
+  view: "search",
+  search: { from: "JFK", to: "LHR", date: nextWeekDate(), passengers: 1, cabin: "Economy" },
+  results: [],
+  selectedFlight: null,
+  passengerInfo: { name: "", email: "", phone: "" },
+  lastBooking: null,
+  emailModalBooking: null,
+};
+
+function nextWeekDate(){
+  const d = new Date();
+  d.setDate(d.getDate() + 7);
+  return d.toISOString().split("T")[0];
+}
+
+function airport(code){ return AIRPORTS.find(a => a.code === code); }
+
+/* ---------------- DETERMINISTIC MOCK GENERATION ---------------- */
+function seedFromString(str){
+  let h = 0;
+  for(let i=0;i<str.length;i++){ h = (h*31 + str.charCodeAt(i)) >>> 0; }
+  return h;
+}
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+
+function generateFlights(from, to, date){
+  const seed = seedFromString(from+to+date);
+  const rand = mulberry32(seed);
+  const fromA = airport(from), toA = airport(to);
+  const isInternational = fromA.country !== toA.country;
+  const baseDuration = 90 + Math.floor(rand()*600); // minutes
+  const count = 4 + Math.floor(rand()*3);
+  const flights = [];
+  for(let i=0;i<count;i++){
+    const airline = AIRLINES[Math.floor(rand()*AIRLINES.length)];
+    const stops = rand() < 0.45 ? 0 : (rand() < 0.8 ? 1 : 2);
+    const durationMin = baseDuration + stops*70 + Math.floor(rand()*60);
+    const depHour = Math.floor(rand()*24);
+    const depMin = rand() < 0.5 ? 0 : 30;
+    const depMinutesTotal = depHour*60 + depMin;
+    const arrMinutesTotal = (depMinutesTotal + durationMin) % (24*60);
+    const dayOffset = Math.floor((depMinutesTotal + durationMin) / (24*60));
+    const price = Math.round((isInternational ? 380 : 95) + rand()*(isInternational ? 900 : 350));
+    flights.push({
+      id: `${from}${to}${date}${i}`.replace(/-/g,""),
+      airline: airline.name,
+      flightNo: airline.code + (100 + Math.floor(rand()*800)),
+      from, to,
+      depTime: fmtTime(depMinutesTotal),
+      arrTime: fmtTime(arrMinutesTotal),
+      dayOffset,
+      durationMin,
+      stops,
+      price,
+      cabin: state.search.cabin,
+    });
+  }
+  flights.sort((a,b) => a.price - b.price);
+  return flights;
+}
+
+function fmtTime(totalMin){
+  totalMin = ((totalMin % (24*60)) + 24*60) % (24*60);
+  let h = Math.floor(totalMin/60), m = totalMin%60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  let h12 = h % 12; if(h12===0) h12=12;
+  return `${h12}:${String(m).padStart(2,"0")} ${ampm}`;
+}
+function fmtDuration(min){
+  const h = Math.floor(min/60), m = min%60;
+  return `${h}h ${m}m`;
+}
+function fmtDate(dstr){
+  const d = new Date(dstr + "T00:00:00");
+  return d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric', year:'numeric' });
+}
+
+/* ---------------- STORAGE ----------------
+   Uses the browser's own localStorage, scoped to whoever's device this runs
+   on. That means "track a booking" only finds bookings made in this same
+   browser — fine for a demo, but a real production app would store bookings
+   in a shared database on the server instead so they're reachable from any
+   device. */
+function saveBooking(booking){
+  try{
+    localStorage.setItem(`skyflip:booking:${booking.ref}`, JSON.stringify(booking));
+    const key = `skyflip:bookings-by-email:${booking.passenger.email.toLowerCase()}`;
+    let refs = [];
+    try{
+      const existing = localStorage.getItem(key);
+      if(existing) refs = JSON.parse(existing);
+    }catch(e){ refs = []; }
+    if(!refs.includes(booking.ref)) refs.push(booking.ref);
+    localStorage.setItem(key, JSON.stringify(refs));
+  }catch(e){
+    console.error("Storage error saving booking", e);
+  }
+}
+
+function getBooking(ref){
+  try{
+    const raw = localStorage.getItem(`skyflip:booking:${ref.toUpperCase()}`);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){
+    return null;
+  }
+}
+
+function getBookingsByEmail(email){
+  try{
+    const raw = localStorage.getItem(`skyflip:bookings-by-email:${email.toLowerCase()}`);
+    if(!raw) return [];
+    const refs = JSON.parse(raw);
+    return refs.map(getBooking).filter(Boolean);
+  }catch(e){
+    return [];
+  }
+}
+
+function genRef(){
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let ref = "";
+  for(let i=0;i<6;i++) ref += chars[Math.floor(Math.random()*chars.length)];
+  return ref;
+}
+
+/* status progression based on how long ago the booking was made, purely simulated */
+function bookingStatusStage(booking){
+  const hoursSince = (Date.now() - booking.createdAt) / 3600000;
+  if(hoursSince < 0.01) return 0; // just booked
+  if(hoursSince < 24) return 1; // confirmed
+  return 1; // stays confirmed until departure in this simulation
+}
+
+/* ---------------- TOAST ---------------- */
+let toastTimer = null;
+function showToast(msg){
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 3200);
+}
+
+/* ---------------- RENDER ---------------- */
+function setView(v){
+  state.view = v;
+  document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.nav === v || (v==="results"&&b.dataset.nav==="search") || (v==="booking"&&b.dataset.nav==="search") || (v==="confirmation"&&b.dataset.nav==="search")));
+  render();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+
+function render(){
+  const app = document.getElementById("app");
+  if(state.view === "search") app.innerHTML = renderSearch();
+  else if(state.view === "results") app.innerHTML = renderResults();
+  else if(state.view === "booking") app.innerHTML = renderBooking();
+  else if(state.view === "confirmation") app.innerHTML = renderConfirmation();
+  else if(state.view === "track") app.innerHTML = renderTrack();
+  attachHandlers();
+}
+
+function airportOptions(selected){
+  const byCountry = {};
+  AIRPORTS.forEach(a => { (byCountry[a.country] = byCountry[a.country]||[]).push(a); });
+  return Object.keys(byCountry).sort().map(country => {
+    const opts = byCountry[country].map(a =>
+      `<option value="${a.code}" ${a.code===selected?"selected":""}>${a.city} (${a.code})</option>`
+    ).join("");
+    return `<optgroup label="${country}">${opts}</optgroup>`;
+  }).join("");
+}
+
+function renderSearch(){
+  const s = state.search;
+  return `
+    <div class="hero">
+      <p class="eyebrow">Departures &amp; arrivals worldwide</p>
+      <h1>Find your next flight</h1>
+      <p class="sub">Search routes between the United States and destinations across the globe.</p>
+      <div class="search-grid">
+        <div class="swap-row">
+          <div class="field" style="flex:1">
+            <label>From</label>
+            <select id="fromSelect">${airportOptions(s.from)}</select>
+          </div>
+          <button class="swap-btn" id="swapBtn" title="Swap origin and destination">⇄</button>
+          <div class="field" style="flex:1">
+            <label>To</label>
+            <select id="toSelect">${airportOptions(s.to)}</select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Depart date</label>
+          <input type="date" id="dateInput" value="${s.date}" min="${new Date().toISOString().split('T')[0]}" />
+        </div>
+      </div>
+      <div class="row-3">
+        <div class="field">
+          <label>Passengers</label>
+          <select id="paxSelect">
+            ${[1,2,3,4,5,6].map(n => `<option value="${n}" ${n===s.passengers?"selected":""}>${n} passenger${n>1?"s":""}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field">
+          <label>Cabin class</label>
+          <select id="cabinSelect">
+            ${["Economy","Premium Economy","Business","First"].map(c => `<option ${c===s.cabin?"selected":""}>${c}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <button class="cta" id="searchBtn" style="margin-top:0">Search flights</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderResults(){
+  const s = state.search;
+  const fromA = airport(s.from), toA = airport(s.to);
+  const rows = state.results.map((f, idx) => `
+    <div class="board-row flap-anim" style="animation-delay:${idx*45}ms">
+      <div>
+        <div class="flap">${f.depTime}</div>
+        <div class="flight-main sub">${f.from} → ${f.to}${f.dayOffset ? " (+1)" : ""}</div>
+      </div>
+      <div class="flight-main">
+        <div class="airline">${f.airline} · ${f.flightNo}</div>
+        <div class="sub">${fmtDuration(f.durationMin)} · ${f.cabin}</div>
+      </div>
+      <div>
+        <span class="stops-tag">${f.stops === 0 ? "Nonstop" : f.stops+" stop"+(f.stops>1?"s":"")}</span>
+      </div>
+      <div class="flap" style="font-size:14px;">${f.arrTime}</div>
+      <div class="price">$${f.price}<span class="per">per passenger</span></div>
+      <div><button class="select-btn" data-select="${f.id}">Select</button></div>
+    </div>
+  `).join("");
+
+  return `
+    <button class="cta ghost" id="backToSearch" style="width:auto;padding:10px 16px;margin-top:18px;">← Edit search</button>
+    <div class="section-title">${fromA.city} (${fromA.code}) → ${toA.city} (${toA.code})</div>
+    <p class="section-sub">${fmtDate(s.date)} · ${s.passengers} passenger${s.passengers>1?"s":""} · ${s.cabin} · ${state.results.length} flights found</p>
+    <div class="board">
+      <div class="board-head">
+        <div>Depart</div><div>Flight</div><div>Stops</div><div>Arrive</div><div>Price</div><div></div>
+      </div>
+      ${rows}
+    </div>
+  `;
+}
+
+function renderBooking(){
+  const f = state.selectedFlight;
+  const fromA = airport(f.from), toA = airport(f.to);
+  const p = state.passengerInfo;
+  const total = f.price * state.search.passengers;
+  return `
+    <button class="cta ghost" id="backToResults" style="width:auto;padding:10px 16px;margin-top:18px;">← Back to results</button>
+    <div class="section-title">Passenger details</div>
+    <p class="section-sub">Enter contact info to complete this booking.</p>
+    <div class="panel">
+      <div class="summary-card">
+        <div class="summary-row"><span>Route</span><b>${fromA.city} (${fromA.code}) → ${toA.city} (${toA.code})</b></div>
+        <div class="summary-row"><span>Date</span><b>${fmtDate(state.search.date)}</b></div>
+        <div class="summary-row"><span>Flight</span><b>${f.airline} · ${f.flightNo}</b></div>
+        <div class="summary-row"><span>Departs / Arrives</span><b>${f.depTime} → ${f.arrTime}</b></div>
+        <div class="summary-row"><span>Cabin</span><b>${f.cabin}</b></div>
+        <div class="summary-row"><span>Passengers</span><b>${state.search.passengers}</b></div>
+        <div class="summary-total"><span>Total</span><span>$${total}</span></div>
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="paxName" placeholder="Jordan Rivera" value="${p.name}" />
+        </div>
+        <div class="field">
+          <label>Phone number</label>
+          <input type="tel" id="paxPhone" placeholder="+1 555 010 2020" value="${p.phone}" />
+        </div>
+      </div>
+      <div class="field" style="margin-top:14px;">
+        <label>Email address (for itinerary &amp; booking confirmation)</label>
+        <input type="email" id="paxEmail" placeholder="name@example.com" value="${p.email}" />
+      </div>
+      <button class="cta" id="confirmBookingBtn" style="margin-top:22px;">Confirm booking — $${total}</button>
+    </div>
+  `;
+}
+
+function renderConfirmation(){
+  const b = state.lastBooking;
+  if(!b) return renderSearch();
+  const fromA = airport(b.flight.from), toA = airport(b.flight.to);
+  return `
+    <div class="section-title">You're booked ✓</div>
+    <p class="section-sub">A confirmation has been generated below. Send it to any email, or look it up later under My bookings.</p>
+    <div class="ticket">
+      <div class="ticket-top">
+        <div class="ticket-ref">BOOKING REFERENCE<b>${b.ref}</b></div>
+        <div class="ticket-status">Confirmed</div>
+      </div>
+      <div class="ticket-route">
+        <div class="ticket-city">
+          <div class="code">${fromA.code}</div>
+          <div class="name">${fromA.city}, ${fromA.country}</div>
+        </div>
+        <div class="ticket-plane">✈</div>
+        <div class="ticket-city" style="text-align:right;">
+          <div class="code">${toA.code}</div>
+          <div class="name">${toA.city}, ${toA.country}</div>
+        </div>
+      </div>
+      <div class="ticket-divider"></div>
+      <div class="ticket-details">
+        <div><div class="lbl">Passenger</div><div class="val">${b.passenger.name}</div></div>
+        <div><div class="lbl">Flight</div><div class="val">${b.flight.airline} ${b.flight.flightNo}</div></div>
+        <div><div class="lbl">Date</div><div class="val">${fmtDate(b.date)}</div></div>
+        <div><div class="lbl">Departs</div><div class="val">${b.flight.depTime}</div></div>
+        <div><div class="lbl">Arrives</div><div class="val">${b.flight.arrTime}</div></div>
+        <div><div class="lbl">Cabin</div><div class="val">${b.flight.cabin}</div></div>
+        <div><div class="lbl">Passengers</div><div class="val">${b.passengers}</div></div>
+        <div><div class="lbl">Total paid</div><div class="val">$${b.total}</div></div>
+      </div>
+      <div class="ticket-actions">
+        <button class="cta secondary" style="width:auto;padding:11px 18px;" id="sendItineraryBtn">Send itinerary by email</button>
+        <button class="cta ghost" style="width:auto;padding:11px 18px;" id="trackThisBtn">Track this booking</button>
+        <button class="cta ghost" style="width:auto;padding:11px 18px;" id="newSearchBtn">Book another flight</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderTrack(){
+  return `
+    <div class="section-title">Track a booking</div>
+    <p class="section-sub">Enter your booking reference and the email used to book.</p>
+    <div class="panel">
+      <div class="track-form">
+        <div class="field">
+          <label>Booking reference</label>
+          <input type="text" id="trackRef" placeholder="e.g. A3K9QZ" style="text-transform:uppercase;" />
+        </div>
+        <div class="field">
+          <label>Email used at booking</label>
+          <input type="email" id="trackEmail" placeholder="name@example.com" />
+        </div>
+        <div class="field" style="flex:0 0 auto;justify-content:flex-end;">
+          <button class="cta secondary" id="trackBtn" style="margin-top:0;width:auto;padding:12px 20px;">Look up</button>
+        </div>
+      </div>
+    </div>
+    <div id="trackResult"></div>
+  `;
+}
+
+function renderTimeline(booking){
+  const stage = bookingStatusStage(booking);
+  const steps = [
+    {label:"Booking received", detail:`Reserved on ${new Date(booking.createdAt).toLocaleString()}`},
+    {label:"Confirmed", detail:"Seat and payment confirmed"},
+    {label:"Check-in opens", detail:"Opens 24 hours before departure"},
+    {label:"Boarding", detail:`${booking.flight.depTime} · Gate assigned at airport`},
+  ];
+  return `
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+        <div>
+          <div style="font-family:var(--mono);color:var(--flap-amber);font-size:12px;letter-spacing:1px;">BOOKING ${booking.ref}</div>
+          <div style="font-size:18px;font-weight:700;margin-top:2px;">${airport(booking.flight.from).city} → ${airport(booking.flight.to).city}</div>
+          <div style="color:var(--muted);font-size:13px;margin-top:2px;">${booking.flight.airline} ${booking.flight.flightNo} · ${fmtDate(booking.date)}</div>
+        </div>
+        <span class="ticket-status">Confirmed</span>
+      </div>
+      <div class="timeline">
+        ${steps.map((step,i) => `
+          <div class="tl-item ${i < stage+1 ? "done" : (i===stage+1?"current":"")}">
+            <div class="tl-line"></div>
+            <div class="tl-dot">${i < stage+1 ? "✓" : (i+1)}</div>
+            <div class="tl-content"><b>${step.label}</b><span>${step.detail}</span></div>
+          </div>
+        `).join("")}
+      </div>
+      <div class="ticket-actions" style="padding:0;border:none;margin-top:20px;">
+        <button class="cta secondary" style="width:auto;padding:11px 18px;" id="trackSendItineraryBtn">Send itinerary by email</button>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------------- HANDLERS ---------------- */
+function attachHandlers(){
+  document.querySelectorAll(".nav-btn").forEach(b => {
+    b.onclick = () => setView(b.dataset.nav);
+  });
+
+  if(state.view === "search"){
+    document.getElementById("swapBtn").onclick = () => {
+      const f = document.getElementById("fromSelect").value;
+      const t = document.getElementById("toSelect").value;
+      document.getElementById("fromSelect").value = t;
+      document.getElementById("toSelect").value = f;
+    };
+    document.getElementById("searchBtn").onclick = () => {
+      const from = document.getElementById("fromSelect").value;
+      const to = document.getElementById("toSelect").value;
+      const date = document.getElementById("dateInput").value;
+      const passengers = parseInt(document.getElementById("paxSelect").value, 10);
+      const cabin = document.getElementById("cabinSelect").value;
+      if(from === to){ showToast("Origin and destination can't be the same"); return; }
+      if(!date){ showToast("Choose a departure date"); return; }
+      state.search = { from, to, date, passengers, cabin };
+      state.results = generateFlights(from, to, date);
+      setView("results");
+    };
+  }
+
+  if(state.view === "results"){
+    document.getElementById("backToSearch").onclick = () => setView("search");
+    document.querySelectorAll("[data-select]").forEach(btn => {
+      btn.onclick = () => {
+        const f = state.results.find(r => r.id === btn.dataset.select);
+        state.selectedFlight = f;
+        setView("booking");
+      };
+    });
+  }
+
+  if(state.view === "booking"){
+    document.getElementById("backToResults").onclick = () => setView("results");
+    document.getElementById("confirmBookingBtn").onclick = async () => {
+      const name = document.getElementById("paxName").value.trim();
+      const phone = document.getElementById("paxPhone").value.trim();
+      const email = document.getElementById("paxEmail").value.trim();
+      if(!name || !email){ showToast("Name and email are required"); return; }
+      if(!/^\S+@\S+\.\S+$/.test(email)){ showToast("Enter a valid email address"); return; }
+      state.passengerInfo = { name, email, phone };
+      const btn = document.getElementById("confirmBookingBtn");
+      btn.disabled = true; btn.textContent = "Confirming…";
+      const f = state.selectedFlight;
+      const booking = {
+        ref: genRef(),
+        flight: f,
+        date: state.search.date,
+        passengers: state.search.passengers,
+        passenger: { name, email, phone },
+        total: f.price * state.search.passengers,
+        createdAt: Date.now(),
+      };
+      saveBooking(booking);
+      state.lastBooking = booking;
+      setView("confirmation");
+      showToast(`Booking confirmed — reference ${booking.ref}`);
+    };
+  }
+
+  if(state.view === "confirmation"){
+    document.getElementById("sendItineraryBtn").onclick = () => openEmailModal(state.lastBooking);
+    document.getElementById("trackThisBtn").onclick = () => {
+      setView("track");
+      setTimeout(() => {
+        document.getElementById("trackRef").value = state.lastBooking.ref;
+        document.getElementById("trackEmail").value = state.lastBooking.passenger.email;
+        document.getElementById("trackBtn").click();
+      }, 0);
+    };
+    document.getElementById("newSearchBtn").onclick = () => setView("search");
+  }
+
+  if(state.view === "track"){
+    document.getElementById("trackBtn").onclick = async () => {
+      const ref = document.getElementById("trackRef").value.trim().toUpperCase();
+      const email = document.getElementById("trackEmail").value.trim().toLowerCase();
+      const resultEl = document.getElementById("trackResult");
+      if(!ref || !email){ showToast("Enter both reference and email"); return; }
+      const booking = getBooking(ref);
+      if(!booking || booking.passenger.email.toLowerCase() !== email){
+        resultEl.innerHTML = `<div class="empty"><div class="icon">✕</div>No booking found for that reference and email.</div>`;
+        return;
+      }
+      resultEl.innerHTML = renderTimeline(booking);
+      document.getElementById("trackSendItineraryBtn").onclick = () => openEmailModal(booking);
+    };
+  }
+}
+
+/* ---------------- EMAIL MODAL (simulated send) ---------------- */
+function buildItineraryText(booking){
+  const fromA = airport(booking.flight.from), toA = airport(booking.flight.to);
+  return `SKYFLIP ITINERARY
+Booking reference: ${booking.ref}
+
+Passenger: ${booking.passenger.name}
+Route: ${fromA.city} (${fromA.code}) -> ${toA.city} (${toA.code})
+Flight: ${booking.flight.airline} ${booking.flight.flightNo}
+Date: ${fmtDate(booking.date)}
+Departs: ${booking.flight.depTime}   Arrives: ${booking.flight.arrTime}
+Cabin: ${booking.flight.cabin}
+Passengers: ${booking.passengers}
+Total paid: $${booking.total}
+
+Thank you for booking with Skyflip.`;
+}
+
+function openEmailModal(booking){
+  state.emailModalBooking = booking;
+  document.getElementById("emailModalInput").value = booking.passenger.email || "";
+  document.getElementById("emailModalPreview").textContent = buildItineraryText(booking);
+  document.getElementById("emailModalBackdrop").classList.add("show");
+}
+function closeEmailModal(){
+  document.getElementById("emailModalBackdrop").classList.remove("show");
+}
+document.getElementById("emailModalCancel").onclick = closeEmailModal;
+document.getElementById("emailModalBackdrop").onclick = (e) => {
+  if(e.target.id === "emailModalBackdrop") closeEmailModal();
+};
+document.getElementById("emailModalSend").onclick = async () => {
+  const email = document.getElementById("emailModalInput").value.trim();
+  if(!/^\S+@\S+\.\S+$/.test(email)){ showToast("Enter a valid email address"); return; }
+
+  const booking = state.emailModalBooking;
+  const btn = document.getElementById("emailModalSend");
+
+  if(!ITINERARY_API_URL){
+    showToast("Email sending isn't configured yet — set ITINERARY_API_URL to your deployed server.");
+    return;
+  }
+
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = "Sending…";
+  try{
+    const res = await fetch(ITINERARY_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to: email, booking }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok){
+      throw new Error(data.error || `Server responded with ${res.status}`);
+    }
+    closeEmailModal();
+    showToast(`Itinerary sent to ${email}`);
+  }catch(err){
+    console.error("Failed to send itinerary:", err);
+    showToast(`Couldn't send email: ${err.message}`);
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+};
+
+/* ---------------- INIT ---------------- */
+render();
+</script>
+</body>
+</html>

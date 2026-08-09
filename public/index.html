@@ -289,8 +289,6 @@
   </div>
 </div>
 
-<footer>Skyflip is a prototype booking experience — no real flights are sold. Itinerary emails send for real once the companion backend is deployed and configured.</footer>
-
 <script>
 /* ---------------- EMAIL BACKEND CONFIG ----------------
    The frontend is served by the same Express server that exposes this API,
@@ -335,6 +333,23 @@ const AIRLINES = [
   {name:"BluePeak Airlines", code:"BP"},
 ];
 
+/* ---------------- CUSTOM / MANUALLY-SEARCHED AIRPORTS ----------------
+   If someone types a city or airport that isn't in the built-in list,
+   we generate a lightweight entry for it on the fly so search, booking,
+   and confirmation all still work. These persist in localStorage so they
+   keep resolving correctly on reload. */
+let customAirports = {};
+try {
+  const raw = localStorage.getItem("skyflip:customAirports");
+  if (raw) customAirports = JSON.parse(raw);
+} catch (e) { customAirports = {}; }
+
+function saveCustomAirports() {
+  try {
+    localStorage.setItem("skyflip:customAirports", JSON.stringify(customAirports));
+  } catch (e) { /* ignore */ }
+}
+
 /* ---------------- STATE ---------------- */
 let state = {
   view: "search",
@@ -344,6 +359,7 @@ let state = {
   passengerInfo: { name: "", email: "", phone: "" },
   lastBooking: null,
   emailModalBooking: null,
+  adminVerified: sessionStorage.getItem("skyflip:adminVerified") === "true",
 };
 
 function nextWeekDate(){
@@ -352,7 +368,51 @@ function nextWeekDate(){
   return d.toISOString().split("T")[0];
 }
 
-function airport(code){ return AIRPORTS.find(a => a.code === code); }
+function airport(code){
+  if(!code) return null;
+  return AIRPORTS.find(a => a.code === code) || customAirports[code] || null;
+}
+
+/* Turn whatever someone typed into the From/To box into a resolved airport
+   code — matching the built-in list first (by code, "City (CODE)" label,
+   or plain city name), and if nothing matches, creating a new custom
+   airport entry on the fly so any place can be searched. */
+function resolveAirportInput(text){
+  text = (text || "").trim();
+  if(!text) return null;
+
+  const codeInParens = text.match(/\(([A-Za-z0-9]{2,4})\)\s*$/);
+  if(codeInParens){
+    const code = codeInParens[1].toUpperCase();
+    if(airport(code)) return code;
+  }
+
+  const upper = text.toUpperCase();
+  let found = AIRPORTS.find(a => a.code === upper) || customAirports[upper];
+  if(found) return found.code;
+
+  found = AIRPORTS.find(a => a.city.toLowerCase() === text.toLowerCase())
+    || Object.values(customAirports).find(a => a.city.toLowerCase() === text.toLowerCase());
+  if(found) return found.code;
+
+  found = AIRPORTS.find(a => a.city.toLowerCase().includes(text.toLowerCase()))
+    || Object.values(customAirports).find(a => a.city.toLowerCase().includes(text.toLowerCase()));
+  if(found) return found.code;
+
+  // Nothing matched — create a custom airport entry from what was typed.
+  let base = text.replace(/[^A-Za-z]/g, "").toUpperCase().slice(0, 3) || "APT";
+  let code = base, i = 1;
+  while(airport(code)){ code = base + i; i++; }
+  const cityName = text.replace(/\s*\([^)]*\)\s*$/, "").trim() || text;
+  customAirports[code] = { code, city: cityName, country: "Other" };
+  saveCustomAirports();
+  return code;
+}
+
+function airportLabel(code){
+  const a = airport(code);
+  return a ? `${a.city} (${a.code})` : (code || "");
+}
 
 /* ---------------- DETERMINISTIC MOCK GENERATION ---------------- */
 function seedFromString(str){
@@ -506,15 +566,9 @@ function render(){
   attachHandlers();
 }
 
-function airportOptions(selected){
-  const byCountry = {};
-  AIRPORTS.forEach(a => { (byCountry[a.country] = byCountry[a.country]||[]).push(a); });
-  return Object.keys(byCountry).sort().map(country => {
-    const opts = byCountry[country].map(a =>
-      `<option value="${a.code}" ${a.code===selected?"selected":""}>${a.city} (${a.code})</option>`
-    ).join("");
-    return `<optgroup label="${country}">${opts}</optgroup>`;
-  }).join("");
+function airportDatalistOptions(){
+  const all = [...AIRPORTS, ...Object.values(customAirports)];
+  return all.map(a => `<option value="${a.city} (${a.code})">${a.country}</option>`).join("");
 }
 
 function renderSearch(){
@@ -524,18 +578,20 @@ function renderSearch(){
       <p class="eyebrow">Departures &amp; arrivals worldwide</p>
       <h1>Find your next flight</h1>
       <p class="sub">Search routes between the United States and destinations across the globe.</p>
+      <datalist id="airportOptionsList">${airportDatalistOptions()}</datalist>
       <div class="search-grid">
         <div class="swap-row">
           <div class="field" style="flex:1">
             <label>From</label>
-            <select id="fromSelect">${airportOptions(s.from)}</select>
+            <input type="text" id="fromInput" list="airportOptionsList" value="${airportLabel(s.from)}" placeholder="City, airport, or code" autocomplete="off" />
           </div>
           <button class="swap-btn" id="swapBtn" title="Swap origin and destination">⇄</button>
           <div class="field" style="flex:1">
             <label>To</label>
-            <select id="toSelect">${airportOptions(s.to)}</select>
+            <input type="text" id="toInput" list="airportOptionsList" value="${airportLabel(s.to)}" placeholder="City, airport, or code" autocomplete="off" />
           </div>
         </div>
+        <p class="section-sub" style="margin:-6px 0 0;">Don't see your city? Just type it — any place can be searched.</p>
         <div class="field">
           <label>Depart date</label>
           <input type="date" id="dateInput" value="${s.date}" min="${new Date().toISOString().split('T')[0]}" />
@@ -630,6 +686,13 @@ function renderBooking(){
         <label>Email address (for itinerary &amp; booking confirmation)</label>
         <input type="email" id="paxEmail" placeholder="name@example.com" value="${p.email}" />
       </div>
+      ${state.adminVerified ? "" : `
+      <div class="field" style="margin-top:14px;">
+        <label>Booking passcode</label>
+        <input type="password" id="bookingPasscode" placeholder="Only the site owner can create bookings" />
+        <p style="color:var(--muted);font-size:12px;margin:4px 0 0;">Skyflip bookings are currently limited to the site owner. Flight search and booking tracking stay open to everyone.</p>
+      </div>
+      `}
       <button class="cta" id="confirmBookingBtn" style="margin-top:22px;">Confirm booking — $${total}</button>
     </div>
   `;
@@ -743,17 +806,21 @@ function attachHandlers(){
 
   if(state.view === "search"){
     document.getElementById("swapBtn").onclick = () => {
-      const f = document.getElementById("fromSelect").value;
-      const t = document.getElementById("toSelect").value;
-      document.getElementById("fromSelect").value = t;
-      document.getElementById("toSelect").value = f;
+      const fromEl = document.getElementById("fromInput");
+      const toEl = document.getElementById("toInput");
+      const tmp = fromEl.value;
+      fromEl.value = toEl.value;
+      toEl.value = tmp;
     };
     document.getElementById("searchBtn").onclick = () => {
-      const from = document.getElementById("fromSelect").value;
-      const to = document.getElementById("toSelect").value;
+      const fromText = document.getElementById("fromInput").value;
+      const toText = document.getElementById("toInput").value;
       const date = document.getElementById("dateInput").value;
       const passengers = parseInt(document.getElementById("paxSelect").value, 10);
       const cabin = document.getElementById("cabinSelect").value;
+      if(!fromText.trim() || !toText.trim()){ showToast("Enter both a departure and destination"); return; }
+      const from = resolveAirportInput(fromText);
+      const to = resolveAirportInput(toText);
       if(from === to){ showToast("Origin and destination can't be the same"); return; }
       if(!date){ showToast("Choose a departure date"); return; }
       state.search = { from, to, date, passengers, cabin };
@@ -781,8 +848,34 @@ function attachHandlers(){
       const email = document.getElementById("paxEmail").value.trim();
       if(!name || !email){ showToast("Name and email are required"); return; }
       if(!/^\S+@\S+\.\S+$/.test(email)){ showToast("Enter a valid email address"); return; }
-      state.passengerInfo = { name, email, phone };
+
       const btn = document.getElementById("confirmBookingBtn");
+
+      if(!state.adminVerified){
+        const passcodeEl = document.getElementById("bookingPasscode");
+        const passcode = passcodeEl ? passcodeEl.value : "";
+        if(!passcode){ showToast("Enter the booking passcode"); return; }
+        btn.disabled = true; btn.textContent = "Checking passcode…";
+        try{
+          const res = await fetch("/api/verify-passcode", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ passcode }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if(!res.ok){
+            throw new Error(data.error || "Incorrect passcode");
+          }
+          state.adminVerified = true;
+          sessionStorage.setItem("skyflip:adminVerified", "true");
+        }catch(err){
+          btn.disabled = false; btn.textContent = `Confirm booking — $${state.selectedFlight.price * state.search.passengers}`;
+          showToast(err.message || "Incorrect passcode");
+          return;
+        }
+      }
+
+      state.passengerInfo = { name, email, phone };
       btn.disabled = true; btn.textContent = "Confirming…";
       const f = state.selectedFlight;
       const booking = {

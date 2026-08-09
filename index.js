@@ -9,6 +9,7 @@ const PORT = process.env.PORT || 3001;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL; // the exact address you verified as a "Sender" in Brevo
 const FROM_NAME = process.env.FROM_NAME || "Skyflip";
+const BOOKING_PASSCODE = process.env.BOOKING_PASSCODE; // only you know this — required to create a booking
 
 if (!BREVO_API_KEY || !FROM_EMAIL) {
   console.warn("WARNING: BREVO_API_KEY / FROM_EMAIL not set. /api/send-itinerary will fail until they are.");
@@ -91,7 +92,18 @@ Thank you for booking with Skyflip.`;
 }
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, brevoConfigured: Boolean(BREVO_API_KEY && FROM_EMAIL) });
+  res.json({ ok: true, brevoConfigured: Boolean(BREVO_API_KEY && FROM_EMAIL), passcodeConfigured: Boolean(BOOKING_PASSCODE) });
+});
+
+app.post("/api/verify-passcode", rateLimit, (req, res) => {
+  const { passcode } = req.body || {};
+  if (!BOOKING_PASSCODE) {
+    return res.status(500).json({ error: "Booking passcode isn't configured on the server yet." });
+  }
+  if (typeof passcode !== "string" || passcode !== BOOKING_PASSCODE) {
+    return res.status(401).json({ error: "Incorrect passcode." });
+  }
+  res.json({ ok: true });
 });
 
 app.post("/api/send-itinerary", rateLimit, async (req, res) => {

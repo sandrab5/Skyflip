@@ -289,6 +289,21 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="passcodeModalBackdrop">
+  <div class="modal">
+    <h3>Booking passcode</h3>
+    <p class="hint">Creating a new booking requires the site owner's passcode.</p>
+    <div class="field">
+      <label>Passcode</label>
+      <input type="password" id="passcodeModalInput" placeholder="Enter passcode" />
+    </div>
+    <div class="modal-actions">
+      <button class="cta secondary" id="passcodeModalSubmit" style="flex:1">Continue</button>
+      <button class="cta ghost" id="passcodeModalCancel" style="flex:0 0 auto;padding-left:18px;padding-right:18px;">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ---------------- EMAIL BACKEND CONFIG ----------------
    The frontend is served by the same Express server that exposes this API,
@@ -352,7 +367,7 @@ function saveCustomAirports() {
 
 /* ---------------- STATE ---------------- */
 let state = {
-  view: "search",
+  view: (window.location.pathname === "/track") ? "track" : "search",
   search: { from: "JFK", to: "LHR", date: nextWeekDate(), passengers: 1, cabin: "Economy" },
   results: [],
   selectedFlight: null,
@@ -549,12 +564,23 @@ function showToast(msg){
 }
 
 /* ---------------- RENDER ---------------- */
-function setView(v){
+function setView(v, opts){
   state.view = v;
   document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.nav === v || (v==="results"&&b.dataset.nav==="search") || (v==="booking"&&b.dataset.nav==="search") || (v==="confirmation"&&b.dataset.nav==="search")));
+  if(!opts || !opts.skipUrlUpdate){
+    const path = v === "track" ? "/track" : "/";
+    if(window.location.pathname !== path){
+      history.pushState({ view: v }, "", path);
+    }
+  }
   render();
   window.scrollTo({top:0, behavior:"smooth"});
 }
+
+window.addEventListener("popstate", () => {
+  const path = window.location.pathname;
+  setView(path === "/track" ? "track" : "search", { skipUrlUpdate: true });
+});
 
 function render(){
   const app = document.getElementById("app");
@@ -686,13 +712,6 @@ function renderBooking(){
         <label>Email address (for itinerary &amp; booking confirmation)</label>
         <input type="email" id="paxEmail" placeholder="name@example.com" value="${p.email}" />
       </div>
-      ${state.adminVerified ? "" : `
-      <div class="field" style="margin-top:14px;">
-        <label>Booking passcode</label>
-        <input type="password" id="bookingPasscode" placeholder="Only the site owner can create bookings" />
-        <p style="color:var(--muted);font-size:12px;margin:4px 0 0;">Skyflip bookings are currently limited to the site owner. Flight search and booking tracking stay open to everyone.</p>
-      </div>
-      `}
       <button class="cta" id="confirmBookingBtn" style="margin-top:22px;">Confirm booking — $${total}</button>
     </div>
   `;
@@ -842,55 +861,20 @@ function attachHandlers(){
 
   if(state.view === "booking"){
     document.getElementById("backToResults").onclick = () => setView("results");
-    document.getElementById("confirmBookingBtn").onclick = async () => {
+    document.getElementById("confirmBookingBtn").onclick = () => {
       const name = document.getElementById("paxName").value.trim();
       const phone = document.getElementById("paxPhone").value.trim();
       const email = document.getElementById("paxEmail").value.trim();
       if(!name || !email){ showToast("Name and email are required"); return; }
       if(!/^\S+@\S+\.\S+$/.test(email)){ showToast("Enter a valid email address"); return; }
 
-      const btn = document.getElementById("confirmBookingBtn");
-
-      if(!state.adminVerified){
-        const passcodeEl = document.getElementById("bookingPasscode");
-        const passcode = passcodeEl ? passcodeEl.value : "";
-        if(!passcode){ showToast("Enter the booking passcode"); return; }
-        btn.disabled = true; btn.textContent = "Checking passcode…";
-        try{
-          const res = await fetch("/api/verify-passcode", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ passcode }),
-          });
-          const data = await res.json().catch(() => ({}));
-          if(!res.ok){
-            throw new Error(data.error || "Incorrect passcode");
-          }
-          state.adminVerified = true;
-          sessionStorage.setItem("skyflip:adminVerified", "true");
-        }catch(err){
-          btn.disabled = false; btn.textContent = `Confirm booking — $${state.selectedFlight.price * state.search.passengers}`;
-          showToast(err.message || "Incorrect passcode");
-          return;
-        }
-      }
-
       state.passengerInfo = { name, email, phone };
-      btn.disabled = true; btn.textContent = "Confirming…";
-      const f = state.selectedFlight;
-      const booking = {
-        ref: genRef(),
-        flight: f,
-        date: state.search.date,
-        passengers: state.search.passengers,
-        passenger: { name, email, phone },
-        total: f.price * state.search.passengers,
-        createdAt: Date.now(),
-      };
-      saveBooking(booking);
-      state.lastBooking = booking;
-      setView("confirmation");
-      showToast(`Booking confirmed — reference ${booking.ref}`);
+
+      if(state.adminVerified){
+        finalizeBooking();
+      }else{
+        openPasscodeModal();
+      }
     };
   }
 
@@ -991,7 +975,70 @@ document.getElementById("emailModalSend").onclick = async () => {
   }
 };
 
+/* ---------------- PASSCODE MODAL (booking creation gate) ---------------- */
+function finalizeBooking(){
+  const f = state.selectedFlight;
+  const { name, email, phone } = state.passengerInfo;
+  const booking = {
+    ref: genRef(),
+    flight: f,
+    date: state.search.date,
+    passengers: state.search.passengers,
+    passenger: { name, email, phone },
+    total: f.price * state.search.passengers,
+    createdAt: Date.now(),
+  };
+  saveBooking(booking);
+  state.lastBooking = booking;
+  setView("confirmation");
+  showToast(`Booking confirmed — reference ${booking.ref}`);
+}
+
+function openPasscodeModal(){
+  document.getElementById("passcodeModalInput").value = "";
+  document.getElementById("passcodeModalBackdrop").classList.add("show");
+  setTimeout(() => document.getElementById("passcodeModalInput").focus(), 50);
+}
+function closePasscodeModal(){
+  document.getElementById("passcodeModalBackdrop").classList.remove("show");
+}
+document.getElementById("passcodeModalCancel").onclick = closePasscodeModal;
+document.getElementById("passcodeModalBackdrop").onclick = (e) => {
+  if(e.target.id === "passcodeModalBackdrop") closePasscodeModal();
+};
+async function submitPasscode(){
+  const passcode = document.getElementById("passcodeModalInput").value;
+  if(!passcode){ showToast("Enter the passcode"); return; }
+  const btn = document.getElementById("passcodeModalSubmit");
+  btn.disabled = true; btn.textContent = "Checking…";
+  try{
+    const res = await fetch("/api/verify-passcode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ passcode }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok){
+      throw new Error(data.error || "Incorrect passcode");
+    }
+    state.adminVerified = true;
+    sessionStorage.setItem("skyflip:adminVerified", "true");
+    closePasscodeModal();
+    finalizeBooking();
+  }catch(err){
+    showToast(err.message || "Incorrect passcode");
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "Continue";
+  }
+}
+document.getElementById("passcodeModalSubmit").onclick = submitPasscode;
+document.getElementById("passcodeModalInput").addEventListener("keydown", (e) => {
+  if(e.key === "Enter") submitPasscode();
+});
+
 /* ---------------- INIT ---------------- */
+document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.nav === state.view));
 render();
 </script>
 </body>

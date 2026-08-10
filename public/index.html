@@ -374,7 +374,8 @@ let state = {
   passengerInfo: { name: "", email: "", phone: "" },
   lastBooking: null,
   emailModalBooking: null,
-  adminVerified: sessionStorage.getItem("skyflip:adminVerified") === "true",
+  adminVerified: false, // deprecated flag, kept for safety; agentPasscode below is what's used now
+  agentPasscode: sessionStorage.getItem("skyflip:agentPasscode") || null,
 };
 
 function nextWeekDate(){
@@ -497,52 +498,28 @@ function fmtDate(dstr){
 }
 
 /* ---------------- STORAGE ----------------
-   Uses the browser's own localStorage, scoped to whoever's device this runs
-   on. That means "track a booking" only finds bookings made in this same
-   browser — fine for a demo, but a real production app would store bookings
-   in a shared database on the server instead so they're reachable from any
-   device. */
-function saveBooking(booking){
-  try{
-    localStorage.setItem(`skyflip:booking:${booking.ref}`, JSON.stringify(booking));
-    const key = `skyflip:bookings-by-email:${booking.passenger.email.toLowerCase()}`;
-    let refs = [];
-    try{
-      const existing = localStorage.getItem(key);
-      if(existing) refs = JSON.parse(existing);
-    }catch(e){ refs = []; }
-    if(!refs.includes(booking.ref)) refs.push(booking.ref);
-    localStorage.setItem(key, JSON.stringify(refs));
-  }catch(e){
-    console.error("Storage error saving booking", e);
+   Bookings live on the server in a shared database now (not the browser), so
+   any device can create or look up a booking — not just the one it started on. */
+async function createBookingOnServer(passcode, draft){
+  const res = await fetch("/api/bookings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ passcode, ...draft }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok){
+    throw new Error(data.error || `Server responded with ${res.status}`);
   }
+  return data.booking;
 }
 
-function getBooking(ref){
-  try{
-    const raw = localStorage.getItem(`skyflip:booking:${ref.toUpperCase()}`);
-    return raw ? JSON.parse(raw) : null;
-  }catch(e){
+async function fetchBooking(ref, email){
+  const res = await fetch(`/api/bookings/${encodeURIComponent(ref.toUpperCase())}?email=${encodeURIComponent(email.toLowerCase())}`);
+  const data = await res.json().catch(() => ({}));
+  if(!res.ok){
     return null;
   }
-}
-
-function getBookingsByEmail(email){
-  try{
-    const raw = localStorage.getItem(`skyflip:bookings-by-email:${email.toLowerCase()}`);
-    if(!raw) return [];
-    const refs = JSON.parse(raw);
-    return refs.map(getBooking).filter(Boolean);
-  }catch(e){
-    return [];
-  }
-}
-
-function genRef(){
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let ref = "";
-  for(let i=0;i<6;i++) ref += chars[Math.floor(Math.random()*chars.length)];
-  return ref;
+  return data.booking;
 }
 
 /* status progression based on how long ago the booking was made, purely simulated */
@@ -870,7 +847,7 @@ function attachHandlers(){
 
       state.passengerInfo = { name, email, phone };
 
-      if(state.adminVerified){
+      if(state.agentPasscode){
         finalizeBooking();
       }else{
         openPasscodeModal();
@@ -897,8 +874,9 @@ function attachHandlers(){
       const email = document.getElementById("trackEmail").value.trim().toLowerCase();
       const resultEl = document.getElementById("trackResult");
       if(!ref || !email){ showToast("Enter both reference and email"); return; }
-      const booking = getBooking(ref);
-      if(!booking || booking.passenger.email.toLowerCase() !== email){
+      resultEl.innerHTML = `<div class="empty">Looking up booking…</div>`;
+      const booking = await fetchBooking(ref, email);
+      if(!booking){
         resultEl.innerHTML = `<div class="empty"><div class="icon">✕</div>No booking found for that reference and email.</div>`;
         return;
       }
@@ -976,28 +954,38 @@ document.getElementById("emailModalSend").onclick = async () => {
 };
 
 /* ---------------- PASSCODE MODAL (booking creation gate) ---------------- */
-function finalizeBooking(){
+async function finalizeBooking(){
   const f = state.selectedFlight;
   const { name, email, phone } = state.passengerInfo;
-  const booking = {
-    ref: genRef(),
+  const draft = {
     flight: f,
     date: state.search.date,
     passengers: state.search.passengers,
     passenger: { name, email, phone },
-    total: f.price * state.search.passengers,
-    createdAt: Date.now(),
   };
-  saveBooking(booking);
-  state.lastBooking = booking;
-  setView("confirmation");
-  showToast(`Booking confirmed — reference ${booking.ref}`);
+
+  const confirmBtn = document.getElementById("confirmBookingBtn");
+  if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.textContent = "Confirming…"; }
+
+  try{
+    const booking = await createBookingOnServer(state.agentPasscode, draft);
+    state.lastBooking = booking;
+    setView("confirmation");
+    showToast(`Booking confirmed — reference ${booking.ref}`);
+  }catch(err){
+    // If the stored passcode was wrong or has changed, clear it and ask again.
+    state.agentPasscode = null;
+    sessionStorage.removeItem("skyflip:agentPasscode");
+    if(confirmBtn){ confirmBtn.disabled = false; confirmBtn.textContent = `Confirm booking — $${f.price * state.search.passengers}`; }
+    openPasscodeModal(err.message);
+  }
 }
 
-function openPasscodeModal(){
+function openPasscodeModal(errorMessage){
   document.getElementById("passcodeModalInput").value = "";
   document.getElementById("passcodeModalBackdrop").classList.add("show");
   setTimeout(() => document.getElementById("passcodeModalInput").focus(), 50);
+  if(errorMessage) showToast(errorMessage);
 }
 function closePasscodeModal(){
   document.getElementById("passcodeModalBackdrop").classList.remove("show");
@@ -1021,8 +1009,8 @@ async function submitPasscode(){
     if(!res.ok){
       throw new Error(data.error || "Incorrect passcode");
     }
-    state.adminVerified = true;
-    sessionStorage.setItem("skyflip:adminVerified", "true");
+    state.agentPasscode = passcode;
+    sessionStorage.setItem("skyflip:agentPasscode", passcode);
     closePasscodeModal();
     finalizeBooking();
   }catch(err){

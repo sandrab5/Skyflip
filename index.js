@@ -1,6 +1,7 @@
 require("dotenv").config();
 const path = require("path");
 const express = require("express");
+const { Pool } = require("pg");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -9,11 +10,34 @@ const PORT = process.env.PORT || 3001;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL; // the exact address you verified as a "Sender" in Brevo
 const FROM_NAME = process.env.FROM_NAME || "Skyflip";
-const BOOKING_PASSCODE = process.env.BOOKING_PASSCODE; // only you know this — required to create a booking
+const BOOKING_PASSCODE = process.env.BOOKING_PASSCODE; // only the agent knows this — required to create a booking
+const DATABASE_URL = process.env.DATABASE_URL; // Neon Postgres connection string
 
 if (!BREVO_API_KEY || !FROM_EMAIL) {
   console.warn("WARNING: BREVO_API_KEY / FROM_EMAIL not set. /api/send-itinerary will fail until they are.");
 }
+if (!DATABASE_URL) {
+  console.warn("WARNING: DATABASE_URL not set. Booking creation/tracking will fail until it is.");
+}
+
+// ---- Database ----
+const pool = DATABASE_URL
+  ? new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } })
+  : null;
+
+async function initDb() {
+  if (!pool) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS bookings (
+      ref TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      data JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  console.log("Database ready — bookings table checked/created.");
+}
+initDb().catch((err) => console.error("Failed to initialize database:", err));
 
 app.use(express.json());
 // Serve the frontend (index.html and any assets) from ./public
@@ -41,6 +65,22 @@ function rateLimit(req, res, next) {
 
 function isValidEmail(email) {
   return typeof email === "string" && /^\S+@\S+\.\S+$/.test(email);
+}
+
+function genRef(){
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let ref = "";
+  for(let i=0;i<6;i++) ref += chars[Math.floor(Math.random()*chars.length)];
+  return ref;
+}
+
+async function generateUniqueRef(){
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const ref = genRef();
+    const existing = await pool.query("SELECT 1 FROM bookings WHERE ref = $1", [ref]);
+    if (existing.rowCount === 0) return ref;
+  }
+  throw new Error("Could not generate a unique booking reference, please try again.");
 }
 
 function escapeHtml(str) {
@@ -92,7 +132,12 @@ Thank you for booking with Skyflip.`;
 }
 
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, brevoConfigured: Boolean(BREVO_API_KEY && FROM_EMAIL), passcodeConfigured: Boolean(BOOKING_PASSCODE) });
+  res.json({
+    ok: true,
+    brevoConfigured: Boolean(BREVO_API_KEY && FROM_EMAIL),
+    passcodeConfigured: Boolean(BOOKING_PASSCODE),
+    databaseConfigured: Boolean(DATABASE_URL),
+  });
 });
 
 app.post("/api/verify-passcode", rateLimit, (req, res) => {
@@ -104,6 +149,80 @@ app.post("/api/verify-passcode", rateLimit, (req, res) => {
     return res.status(401).json({ error: "Incorrect passcode." });
   }
   res.json({ ok: true });
+});
+
+// Creates a booking — requires the agent passcode, stores it in the shared database
+// so it can be tracked from any device, not just the browser that created it.
+app.post("/api/bookings", rateLimit, async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({ error: "Database isn't configured on the server yet." });
+    }
+    const { passcode, flight, date, passengers, passenger } = req.body || {};
+
+    if (!BOOKING_PASSCODE) {
+      return res.status(500).json({ error: "Booking passcode isn't configured on the server yet." });
+    }
+    if (typeof passcode !== "string" || passcode !== BOOKING_PASSCODE) {
+      return res.status(401).json({ error: "Incorrect passcode." });
+    }
+    if (!flight || !flight.from || !flight.to || !date || !passengers || !passenger) {
+      return res.status(400).json({ error: "Missing booking details." });
+    }
+    if (!passenger.name || !isValidEmail(passenger.email)) {
+      return res.status(400).json({ error: "A valid passenger name and email are required." });
+    }
+
+    const ref = await generateUniqueRef();
+    const booking = {
+      ref,
+      flight,
+      date,
+      passengers,
+      passenger,
+      total: flight.price * passengers,
+      createdAt: Date.now(),
+    };
+
+    await pool.query(
+      "INSERT INTO bookings (ref, email, data) VALUES ($1, $2, $3)",
+      [ref, passenger.email.toLowerCase(), JSON.stringify(booking)]
+    );
+
+    res.json({ ok: true, booking });
+  } catch (err) {
+    console.error("Create booking error:", err);
+    res.status(500).json({ error: "Failed to create booking. Please try again." });
+  }
+});
+
+// Looks up a booking by reference + the email used at booking time — works from
+// any device, since it reads from the shared database, not browser storage.
+app.get("/api/bookings/:ref", rateLimit, async (req, res) => {
+  try {
+    if (!pool) {
+      return res.status(500).json({ error: "Database isn't configured on the server yet." });
+    }
+    const ref = (req.params.ref || "").toUpperCase();
+    const email = (req.query.email || "").toLowerCase();
+    if (!ref || !email) {
+      return res.status(400).json({ error: "Booking reference and email are required." });
+    }
+
+    const result = await pool.query(
+      "SELECT data FROM bookings WHERE ref = $1 AND email = $2",
+      [ref, email]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "No booking found for that reference and email." });
+    }
+
+    res.json({ ok: true, booking: result.rows[0].data });
+  } catch (err) {
+    console.error("Lookup booking error:", err);
+    res.status(500).json({ error: "Failed to look up booking. Please try again." });
+  }
 });
 
 app.post("/api/send-itinerary", rateLimit, async (req, res) => {

@@ -2,8 +2,13 @@ name = "skyflip-api"
 main = "src/index.js"
 compatibility_date = "2026-08-22"
 
+[assets]
+directory = "../public"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
 # Secrets are intentionally NOT stored in this file.
-# Set them with `wrangler secret put`:
+# Set them in Cloudflare Workers > Settings > Variables and Secrets:
 #   DATABASE_URL
 #   BREVO_API_KEY
 #   FROM_EMAIL

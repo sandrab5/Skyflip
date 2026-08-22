@@ -1,0 +1,5 @@
+DATABASE_URL="postgresql://..."
+BREVO_API_KEY="xkeysib-..."
+FROM_EMAIL="your-verified-sender@example.com"
+FROM_NAME="Skyflip"
+BOOKING_PASSCODE="your-secret-passcode"

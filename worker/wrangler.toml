@@ -1,0 +1,11 @@
+name = "skyflip-api"
+main = "src/index.js"
+compatibility_date = "2026-08-22"
+
+# Secrets are intentionally NOT stored in this file.
+# Set them with `wrangler secret put`:
+#   DATABASE_URL
+#   BREVO_API_KEY
+#   FROM_EMAIL
+#   FROM_NAME
+#   BOOKING_PASSCODE

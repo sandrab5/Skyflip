@@ -508,18 +508,32 @@ async function createBookingOnServer(passcode, draft){
   });
   const data = await res.json().catch(() => ({}));
   if(!res.ok){
-    throw new Error(data.error || `Server responded with ${res.status}`);
+    const err = new Error(data.error || `Server responded with ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
   return data.booking;
 }
 
 async function fetchBooking(ref, email){
-  const res = await fetch(`/api/bookings/${encodeURIComponent(ref.toUpperCase())}?email=${encodeURIComponent(email.toLowerCase())}`);
-  const data = await res.json().catch(() => ({}));
-  if(!res.ok){
-    return null;
+  // Render's free tier can take 30-50s to wake from sleep, so give this
+  // plenty of time before giving up — and always resolve/reject cleanly so
+  // the UI never gets stuck on "Looking up…" forever.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  try{
+    const res = await fetch(
+      `/api/bookings/${encodeURIComponent(ref.toUpperCase())}?email=${encodeURIComponent(email.toLowerCase())}`,
+      { signal: controller.signal }
+    );
+    const data = await res.json().catch(() => ({}));
+    if(!res.ok){
+      return null;
+    }
+    return data.booking;
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return data.booking;
 }
 
 /* status progression based on how long ago the booking was made, purely simulated */
@@ -874,8 +888,14 @@ function attachHandlers(){
       const email = document.getElementById("trackEmail").value.trim().toLowerCase();
       const resultEl = document.getElementById("trackResult");
       if(!ref || !email){ showToast("Enter both reference and email"); return; }
-      resultEl.innerHTML = `<div class="empty">Looking up booking…</div>`;
-      const booking = await fetchBooking(ref, email);
+      resultEl.innerHTML = `<div class="empty">Looking up booking… this can take up to a minute if the app has been idle.</div>`;
+      let booking;
+      try{
+        booking = await fetchBooking(ref, email);
+      }catch(err){
+        resultEl.innerHTML = `<div class="empty"><div class="icon">✕</div>Couldn't reach the server. It may still be waking up — please try again in a moment.</div>`;
+        return;
+      }
       if(!booking){
         resultEl.innerHTML = `<div class="empty"><div class="icon">✕</div>No booking found for that reference and email.</div>`;
         return;
@@ -973,11 +993,17 @@ async function finalizeBooking(){
     setView("confirmation");
     showToast(`Booking confirmed — reference ${booking.ref}`);
   }catch(err){
-    // If the stored passcode was wrong or has changed, clear it and ask again.
-    state.agentPasscode = null;
-    sessionStorage.removeItem("skyflip:agentPasscode");
     if(confirmBtn){ confirmBtn.disabled = false; confirmBtn.textContent = `Confirm booking — $${f.price * state.search.passengers}`; }
-    openPasscodeModal(err.message);
+    if(err.status === 401){
+      // Passcode was actually wrong — clear it and ask again.
+      state.agentPasscode = null;
+      sessionStorage.removeItem("skyflip:agentPasscode");
+      openPasscodeModal(err.message);
+    }else{
+      // Some other failure (server waking up, network hiccup, etc.) — keep
+      // the passcode saved and just let the agent retry.
+      showToast(err.message || "Couldn't reach the server — please try again in a moment.");
+    }
   }
 }
 

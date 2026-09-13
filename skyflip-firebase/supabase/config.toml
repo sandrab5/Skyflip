@@ -1,0 +1,12 @@
+# Each function is publicly callable without a Supabase auth token —
+# access to booking creation is instead controlled by the BOOKING_PASSCODE
+# check inside create-booking itself.
+
+[functions.create-booking]
+verify_jwt = false
+
+[functions.get-booking]
+verify_jwt = false
+
+[functions.send-itinerary]
+verify_jwt = false
